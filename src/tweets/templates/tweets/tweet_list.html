@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
+
     <div class='row'>
         <div class='col-sm-3 col-xs-12' style='background-color:red'>
             <h1>{{ request.user }}</h1>
@@ -8,33 +9,150 @@
         <div class='col-sm-9'>
         {% if not request.GET.q %}
             <div class=''>
-                {% include 'tweets/form.html' with form=create_form action_url=create_url btn_title='Tweet' %}
+                {% include 'tweets/form.html' with form=create_form action_url=create_url btn_title='Tweet' form_id='tweet-form' %}
             </div>
             <hr/>
         {% endif %}
-        {% for object in object_list %}
-            <div class="media">
-                <div class="media-left">
-                    <a href="#">
-                        {% if object.image %}
-                        <img class="media-object" src="..." alt="...">
-                        {% endif %}
-                    </a>
-                </div>
-                <div class="media-body">
-                    {{ object.content }}<br/>
-                    via {{ object.user }} | {{ object.timestamp|timesince }} ago
-                    <a href='{{ object.get_absolute_url }}'>View</a>
-                </div>
+            <div id='tweet-container'>
             </div>
-            <hr/>
-        {% empty %}
-            {% if request.GET.q %}
-                <p>No tweets found.</p>
-            {%  else %}
-                <p>No tweets yet.</p>
-            {% endif %}
-        {% endfor %}
+
+            <a href='#' id='load-more'>Load more Tweets</a>
+
         </div>
     </div>
 {% endblock content %}
+
+{% block script %}
+<script>
+
+function getParameterByName(name, url) {
+    if (!url) {
+      url = window.location.href;
+    }
+    name = name.replace(/[\[\]]/g, "\\$&");
+    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
+        results = regex.exec(url);
+    if (!results) return null;
+    if (!results[2]) return '';
+    return decodeURIComponent(results[2].replace(/\+/g, " "));
+}
+
+$(document).ready(function(){
+    console.log('working');
+
+    var query = getParameterByName('q')
+    var tweetList = [];
+    var nextTweetUrl;
+
+    function attachTweet(tweetValue, prepend){
+         var tweetContent = tweetValue.content;
+         var tweetUser = tweetValue.user;
+         var tweetDateDisplay = tweetValue.date_display
+         var tweetFormattedHtml = "<div class='media'><div class='media-body'>" + tweetContent + '<br/> via ' +
+                tweetUser.username + ' | ' + tweetDateDisplay + ' | ' +
+                "<a href='#'>View</a>" + '</div></div><hr/>'
+         if (prepend == true) {
+            $('#tweet-container').prepend(tweetFormattedHtml)
+        } else {
+            $('#tweet-container').append(tweetFormattedHtml)
+        }
+    }
+
+    function parseTweets(){
+        if (tweetList == 0) {
+            $('#tweet-container').text('No tweets currently found.')
+        } else {
+            $.each(tweetList, function(key, value){
+                var tweetKey = key
+                attachTweet(value)
+            })
+        }
+    }
+
+    function fetchTweets(url){
+        var fetchUrl;
+        if (!url) {
+            fetchUrl = '/api/tweet/'
+        } else {
+            fetchUrl = url
+        }
+        $.ajax({
+            url: fetchUrl,
+            method: 'GET',
+            data: {
+                'q': query
+            },
+            success: function(data){
+                console.log(data)
+                tweetList = data.results
+                if (data.next){
+                    nextTweetUrl = data.next
+                } else {
+                    $('#load-more').css('display', 'none')
+                }
+                parseTweets()
+            },
+            error: function(data){
+                console.log('Error')
+                console.log(data)
+            }
+        })
+    }
+    fetchTweets()
+
+    $('#load-more').click(function(event){
+        event.preventDefault()
+        if (nextTweetUrl) {
+              fetchTweets(nextTweetUrl)
+        }
+    })
+
+    var charsStart = 140;
+    var charsCurrent = 0;
+    $('#tweet-form').append("<span id='tweetCharsLeft'>" + charsStart + "</span>")
+
+    $('#tweet-form textarea').keyup(function(event){
+        var tweetValue = $(this).val()
+        charsCurrent = charsStart - tweetValue.length
+        var spanChars = $('#tweetCharsLeft')
+        spanChars.text(charsCurrent)
+
+        if (charsCurrent > 0) {
+            spanChars.removeClass('grey-color')
+            spanChars.removeClass('red-color')
+        } else if (charsCurrent == 0) {
+            spanChars.addClass('grey-color')
+            spanChars.removeClass('red-color')
+        } else if (charsCurrent < 0) {
+            spanChars.addClass('red-color')
+            spanChars.removeClass('grey-color')
+        }
+    })
+
+    $('#tweet-form').submit(function(event){
+        event.preventDefault()
+        var this_ = $(this)
+        var formData = this_.serialize()
+        if (charsCurrent >= 0) {
+            $.ajax({
+                url: '/api/tweet/create/',
+                method: 'POST',
+                data: formData,
+                success: function(data){
+                    this_.find('input[type=text], textarea').val('')
+                    attachTweet(data, true)
+                },
+                error: function(data){
+                    console.log('Error')
+                    console.log(data)
+                }
+            })
+        } else {
+            console.log('Cannot send, tweet too long.')
+        }
+    })
+
+});
+
+</script>
+{% endblock script %}
