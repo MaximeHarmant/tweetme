@@ -44,13 +44,55 @@ $(document).ready(function(){
     var tweetList = [];
     var nextTweetUrl;
 
-    function attachTweet(tweetValue, prepend){
+    $(document.body).on('click', '.retweetBtn', function(e){
+        e.preventDefault()
+        var url = "/api" + $(this).attr("href")
+        $.ajax({
+            method: "GET",
+            url: url,
+            success: function(data){
+                console.log(data)
+                attachTweet(data, true, true)
+                updateHashLinks()
+            },
+            error: function(data){
+                console.log('error')
+                console.log(data)
+            },
+        })
+    })
+
+    function updateHashLinks(){
+        $('.media-body').each(function(data){
+            var hashtagRegex = /(^|\s)#([\w\d-]+)/g
+            var newText = $(this).html().replace(hashtagRegex, "$1<a href='/tags/$2/'>#$2</a>")
+            $(this).html(newText)
+        })
+    }
+
+    function attachTweet(tweetValue, prepend, retweet){
          var tweetContent = tweetValue.content;
          var tweetUser = tweetValue.user;
          var tweetDateDisplay = tweetValue.date_display
-         var tweetFormattedHtml = "<div class='media'><div class='media-body'>" + tweetContent + '<br/> via ' +
-                tweetUser.username + ' | ' + tweetDateDisplay + ' | ' +
-                "<a href='#'>View</a>" + '</div></div><hr/>'
+         var tweetFormattedHtml;
+         if (retweet && tweetValue.parent){
+            // retweet
+            var mainTweet = tweetValue.parent
+            tweetFormattedHtml = "<div class='media'><div class='media-body'><span class='grey-color'>Retweet via " +
+                tweetUser.username + " on " + tweetDateDisplay + "</span><br/>" +
+                mainTweet.content + "<br/> via <a href='" + mainTweet.user.url + "'>" +
+                mainTweet.user.username + '</a> | ' + mainTweet.date_display + ' | ' +
+                "<a href='/tweet/" + mainTweet.id + "'>View | </a>" +
+                "<a class='retweetBtn' href='/tweet/" + tweetValue.id + "/retweet/'>Retweet</a>" + '</div></div><hr/>'
+         } else {
+            // fresh tweet
+            tweetFormattedHtml = "<div class='media'><div class='media-body'>" + tweetContent +
+                "<br/> via <a href='" + tweetUser.url + "'>" +
+                tweetUser.username + '</a> | ' + tweetDateDisplay + ' | ' +
+                "<a href='/tweet/" + tweetValue.id + "'>View | </a>" +
+                "<a class='retweetBtn' href='/tweet/" + tweetValue.id + "/retweet/'>Retweet</a>" + '</div></div><hr/>'
+         }
+
          if (prepend == true) {
             $('#tweet-container').prepend(tweetFormattedHtml)
         } else {
@@ -64,7 +106,11 @@ $(document).ready(function(){
         } else {
             $.each(tweetList, function(key, value){
                 var tweetKey = key
-                attachTweet(value)
+                if (value.parent){
+                attachTweet(value, false, true)
+                } else {
+                    attachTweet(value)
+                }
             })
         }
     }
@@ -91,6 +137,7 @@ $(document).ready(function(){
                     $('#load-more').css('display', 'none')
                 }
                 parseTweets()
+                updateHashLinks()
             },
             error: function(data){
                 console.log('Error')
@@ -141,6 +188,7 @@ $(document).ready(function(){
                 success: function(data){
                     this_.find('input[type=text], textarea').val('')
                     attachTweet(data, true)
+                    updateHashLinks()
                 },
                 error: function(data){
                     console.log('Error')
